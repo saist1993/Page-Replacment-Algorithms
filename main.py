@@ -3,6 +3,15 @@ import os
 #We need to read from a file and save the parsed meta data in an list .
 #Let all the temporary variable begin with "_" that is underscore 
 input = []
+virtualMemory = []
+ram=[]
+
+page_size = 4
+frame_size = 4
+number_of_pages = 4000	#Size of virtual memory
+number_of_frames = 2000 #Size of main memory
+
+
 def readFile(path):	#it takes path with file name as input
 	global input
 	_counter=0				#temporary counter
@@ -26,43 +35,28 @@ def readFile(path):	#it takes path with file name as input
 #This class has following functions for now 
 # Read, Name of the Process , Memory Location''' 
 class Page:
-	def __init__(self, number, size, mapped, startLocation):
+	def __init__(self, index, size, frame_index,process):
+		self.size = size
+		self.process = process
+		self.content = frame_index
+		self.index = index
+
+class Frame:
+	def __init__(self, index, size, startLocation):
 		self.size=size
-		self.mapped=mapped
 		self.Location=startLocation
-		self.number=number
+		self.index=index
 
-#lets make a virtual memory table and a mapping function 
+if __name__ == "__main__"
+	readFile("/home/gaurav/OperatingSystem/Project/example_trace.txt")
+	for index in range(number_of_pages):
+		page = Page(index, page_size, -1, -1)
+		virtualMemory.append(page)
 
-virtualMemory = []
-ram=[]
+	location = 0
+	for index in range(number_of_frames):
+		frame = Frame(index,frame_size,location)
+		location = location + size
+		ram.append(frame)
 
-def fillVirtualMemory(pageSize,vMemorySize):
-	virtualPageNo=0
-	#print pageSize
-	for memoryLocation in range(0,vMemorySize, pageSize):
-		#print memoryLocation
-		virtualPage = Page(virtualPageNo, pageSize, -1, memoryLocation)
-		virtualMemory.append(virtualPage)
-		virtualPageNo=virtualPageNo + 1
-
-
-fillVirtualMemory(4,64)
-for x in range(0,4):		 	
-	print virtualMemory[x].Location
-
-
-#need to write a converter basically mmu which will map the virtual process to memory location ..
-
-def mmu(processId, function, location):
-	location= 
-
-
-
-
-
-
-
-
-
-readFile("/home/gaurav/OperatingSystem/Project/example_trace.txt")
+	#The virtual memory and RAM have been setup by now
