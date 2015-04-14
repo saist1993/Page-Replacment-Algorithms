@@ -6,10 +6,36 @@ input = []
 virtualMemory = []
 ram=[]
 
-page_size = 4
+page_size = 128
 frame_size = 4
 number_of_pages = 4000	#Size of virtual memory
 number_of_frames = 2000 #Size of main memory
+size = 128
+
+
+
+def findPage(location):
+	print "len" + str(len(virtualMemory))
+	for index in range(len(virtualMemory)):
+		lowerIndex = virtualMemory[index].Location
+		try:
+			upperIndex = virtualMemory[index+1].Location
+		except:
+			return	
+		if int(location) >= int(lowerIndex) and int(location) < int(upperIndex):
+			return virtualMemory[index]
+
+
+
+def LRU():
+	for node in input:
+		location = int(str(node[2]),16)	#converting it into integer
+		page = findPage(location)
+		if page:
+			print "found page"
+		else:
+			print "no page found"
+
 
 
 def readFile(path):	#it takes path with file name as input
@@ -35,23 +61,26 @@ def readFile(path):	#it takes path with file name as input
 #This class has following functions for now 
 # Read, Name of the Process , Memory Location''' 
 class Page:
-	def __init__(self, index, size, frame_index,process):
+	def __init__(self, index, size, frame_index,process, startLocation):
 		self.size = size
 		self.process = process
 		self.content = frame_index
 		self.index = index
+		self.Location=startLocation
 
-class Frame:
+class Frame:#ram
 	def __init__(self, index, size, startLocation):
 		self.size=size
 		self.Location=startLocation
 		self.index=index
 
-if __name__ == "__main__"
+if __name__ == "__main__":
 	readFile("/home/gaurav/OperatingSystem/Project/example_trace.txt")
+	_startlocation = 0
 	for index in range(number_of_pages):
-		page = Page(index, page_size, -1, -1)
+		page = Page(index, page_size, -1, -1, _startlocation)
 		virtualMemory.append(page)
+		_startlocation=_startlocation + page_size
 
 	location = 0
 	for index in range(number_of_frames):
@@ -60,3 +89,11 @@ if __name__ == "__main__"
 		ram.append(frame)
 
 	#The virtual memory and RAM have been setup by now
+	LRU()
+# a simple function which either returns null or relevent Page object.
+
+
+
+
+
+#lets code least recenty used algorithm 
