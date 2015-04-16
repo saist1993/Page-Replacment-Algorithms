@@ -1,4 +1,5 @@
 import os
+import random
 
 #Variables that might affect the simulation		
 page_size = 128
@@ -11,8 +12,8 @@ instruction_count = 0
 fault_count = 0
 hit_count = 0
 #For adaptive average algos
-adaptive_average_size = number_of_pages/10
-adaptive_average_tolerance_ratio = 3
+adaptive_average_size = number_of_pages/50
+adaptive_average_tolerance_ratio = 3.0
 pre_emptive_adaptive_index = 0
 cpre_emptive_adaptive_size = 50
 
@@ -257,23 +258,24 @@ def average_adaptive_least_recently_used():
 	if ram.first_unmapped >= 0:
 		return ram.first_unmapped
 
-	candidate = None
-	while True:
-		for i in range(pre_emptive_adaptive_index, virtualMemory.size):
-			page = virtualMemory.get(i)
-			if page.isMapped():
-				candidate = page
-				break	
-
-		if not candidate is None:
-			break
-		else:
-			pre_emptive_adaptive_index = 0
 	#now candidate surely is not none and only one item has been scanned in this area
-	for j in range(i,virtualMemory.size):
-		page = virtualMemory.get(j)
-		if page.isMapped() and page.last_referred <= candidate.last_referred:
-			candidate = page
+	sum = 0
+	mapped = 0
+	for i in range(pre_emptive_adaptive_index,virtualMemory.size):
+		page = virtualMemory.get(i)
+		if page.isMapped():
+			mapped += 1
+			sum += instruction_count - page.last_referred
+			if mapped > adaptive_average_size:
+				if instruction_count - page.last_referred <= (float(sum)/mapped)/adaptive_average_tolerance_ratio:
+					#Then simply return this shit.
+					pre_emptive_adaptive_index = i
+					return page.frame_index
+
+	#If the control comes here, then we did not find any suitable thing.
+	candidate = virtualMemory.get(random.randint(pre_emptive_adaptive_index,virtualMemory.size))
+	pre_emptive_adaptive_index = 0
+	return candidate.frame_index
 def least_frequently_used():
 	global virtualMemory,ram
 
@@ -294,7 +296,6 @@ def least_frequently_used():
 			candidate = page
 
 	return candidate.frame_index
-
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
 #HIT COUNTERS~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 def hit_least_frequently_used(page):
@@ -304,7 +305,7 @@ def hit_least_frequently_used(page):
 def page_fault():
 	global instruction_count,ram
 	#Currently running FIFO
-	frame_index = least_recently_used()
+	frame_index = average_adaptive_least_recently_used()
 	ram.replacing(frame_index)
 	return frame_index
 def environment():
