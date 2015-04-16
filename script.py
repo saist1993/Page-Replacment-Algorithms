@@ -10,6 +10,12 @@ second_chance_cycle_time = 10
 instruction_count = 0
 fault_count = 0
 hit_count = 0
+#For adaptive average algos
+adaptive_average_size = number_of_pages/10
+adaptive_average_tolerance_ratio = 3
+pre_emptive_adaptive_index = 0
+cpre_emptive_adaptive_size = 50
+
 traces_dir = os.path.join(os.path.dirname(__file__),'traces')
 
 virtualMemory = None
@@ -175,15 +181,27 @@ def first_in_first_out():
 def second_chance_first_in_first_out():
 	global virtualMemory,ram,second_chance_cycle_time
 
-	candidate = virtualMemory.get(first_in_first_out)
+	if ram.first_unmapped >= 0:
+		return ram.first_unmapped
+	while True:
+		candidate = None
+		for i in range(virtualMemory.size):
+			page = virtualMemory.get(i)
+			if page.isMapped():
+				candidate = page
+				break
 
-	#Candidate is our first bali ka bakra
-	if candidate.lastAccessed() - candidate.time_fetched >= 1:
-		return candidate.frame_index
-	else:
-		candidate.time_fetched = instruction_count
-		candidate.last_referred = instruction_count
-		second_chance_first_in_first_out()
+		for j in range(i,virtualMemory.size):
+			page = virtualMemory.get(j)
+			if page.isMapped() and page.time_fetched <= candidate.time_fetched :
+				candidate = page
+
+		if not candidate.lastAccessed() - candidate.time_fetched >= 1:
+			print "SAVED"
+			return candidate.frame_index
+		else:
+			candidate.time_fetched = instruction_count
+			candidate.last_referred = instruction_count
 def least_recently_used():
 	global virtualMemory,ram
 	if ram.first_unmapped >= 0:
@@ -203,6 +221,59 @@ def least_recently_used():
 			candidate = page
 
 	return candidate.frame_index
+def preemptive_adaptive_least_recently_used():
+	global virtualMemory,ram,pre_emptive_adaptive_index,pre_emptive_adaptive_size
+
+	if ram.first_unmapped >= 0:
+		return ram.first_unmapped
+	#Put first mapped page into candidate var
+	#Find first mapped page and put it in candidate var
+	candidate = None
+	while True:
+		for i in range(pre_emptive_adaptive_index, min(virtualMemory.size,pre_emptive_adaptive_index + pre_emptive_adaptive_size)):
+			page = virtualMemory.get(i)
+			if page.isMapped():
+				candidate = page
+				break	
+
+		if not candidate is None:
+			break
+		else:
+			if pre_emptive_adaptive_index + pre_emptive_adaptive_size < virtualMemory.size:
+				pre_emptive_adaptive_index += pre_emptive_adaptive_size
+			else:
+				#Overflow could have or must have happened
+				pre_emptive_adaptive_index = 0
+	#now candidate surely is not none
+	for i in range(pre_emptive_adaptive_index,min(pre_emptive_adaptive_index+pre_emptive_adaptive_size,virtualMemory.size)):
+		page = virtualMemory.get(i)
+		if page.isMapped() and page.last_referred <= candidate.last_referred:
+			candidate = page
+
+	return candidate.frame_index
+def average_adaptive_least_recently_used():
+	global virtualMemory,ram,pre_emptive_adaptive_index,pre_emptive_adaptive_size
+
+	if ram.first_unmapped >= 0:
+		return ram.first_unmapped
+
+	candidate = None
+	while True:
+		for i in range(pre_emptive_adaptive_index, virtualMemory.size):
+			page = virtualMemory.get(i)
+			if page.isMapped():
+				candidate = page
+				break	
+
+		if not candidate is None:
+			break
+		else:
+			pre_emptive_adaptive_index = 0
+	#now candidate surely is not none and only one item has been scanned in this area
+	for j in range(i,virtualMemory.size):
+		page = virtualMemory.get(j)
+		if page.isMapped() and page.last_referred <= candidate.last_referred:
+			candidate = page
 def least_frequently_used():
 	global virtualMemory,ram
 
@@ -223,6 +294,7 @@ def least_frequently_used():
 			candidate = page
 
 	return candidate.frame_index
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
 #HIT COUNTERS~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 def hit_least_frequently_used(page):
@@ -231,15 +303,10 @@ def hit_least_frequently_used(page):
 
 def page_fault():
 	global instruction_count,ram
-
 	#Currently running FIFO
-	frame_index = first_in_first_out()
+	frame_index = least_recently_used()
 	ram.replacing(frame_index)
 	return frame_index
-def page_hit(page):
-	hit_least_frequently_used(page)
-	return True
-
 def environment():
 	global virtualMemory, ram, instruction_count, input, fault_count
 
@@ -315,7 +382,7 @@ def environment():
 		instruction_count += 1
 
 if __name__ == "__main__":
-	readFile(os.path.join(traces_dir,'vm_trace_fragment.txt'))
+	readFile(os.path.join(traces_dir,'vm_trace_fragment_two.txt'))
 	ram = Ram(init_ram(),frame_size)
 	virtualMemory = VirtualMemory(init_virtualMemory())
 	environment()
