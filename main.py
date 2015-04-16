@@ -6,35 +6,18 @@ import os
 #We need to read from a file and save the parsed meta data in an list .
 #Let all the temporary variable begin with "_" that is underscore 
 input = []
-virtualMemory = []
-ram=[]
 class Page:
 	def __init__(self, index, size, frame_index,process, startLocation):
 		self.size = size
 		self.process = process
 		self.frame_index = frame_index
 		self.index = index
-		self.location=startLocation
-
-	def isMapped(self):
-		if self.frame_index != -1:
-			return True
-		return False
-
-	def printable(self):
-		return 'Process: %(process)s, frame_index: %(frame_index)s, index: %(index)s, location = %(location)s' % {'process': self.process, 'frame_index': self.frame_index, 'index': self.index, 'location': self.location}
-
-class Frame:											#Ram
-	def __init__(self, index, size, startLocation):
-		self.size=size
-		self.location=startLocation
-		self.index=index
+		self.location=startLocation		
 		self.last_referred = -1			#Only to be used for LRU
 		self.last_wrote = -1
 		self.time_fetched = 0
 		self.permissions_read = False
 		self.permissions_write = False
-		self.ismapped = False
 
 	def isReferenced_read(self,instruction_count):		#Only to be used for LRU
 		self.last_referred = instruction_count
@@ -55,6 +38,21 @@ class Frame:											#Ram
 		else:
 			return self.last_referred
 
+	def isMapped(self):
+		if self.frame_index != -1:
+			return True
+		return False
+
+	def printable(self):
+		return 'Process: %(process)s, frame_index: %(frame_index)s, index: %(index)s, location = %(location)s' % {'process': self.process, 'frame_index': self.frame_index, 'index': self.index, 'location': self.location}
+
+class Frame:											#Ram
+	def __init__(self, index, size, startLocation):
+		self.size=size
+		self.location=startLocation
+		self.index=index
+		self.ismapped = False
+
 	def printable(self):
 		return 'ismapped: %(ismapped)s, index: %(index)s, location = %(location)s' % {'ismapped': self.ismapped, 'index': self.index, 'location': self.location}
 
@@ -68,8 +66,10 @@ size = 128
 #only for LRU (or unit time)
 instruction_count = 0
 
-
 traces_dir = os.path.join(os.path.dirname(__file__),'traces')
+
+virtualMemory = []
+ram = []
 
 def findPage(location):
 	#Finds a page based on an address.
@@ -88,43 +88,41 @@ def findPage(location):
 ##################################################ALGORITHMS######################################################################
 
 def least_recently_used():
-	global ram
+	global virtualMemory
 	
 	#Find first mapped page and put it in candidate var
 	candidate = None
-	for frame in ram:
-		if frame.ismapped:
-			candidate = frame
+	for page in virtualMemory:
+		if page.isMapped():
+			candidate = page
 			break
 		else:
-			return frame
+			return page
 
 	#By now either we did find an empty frame and threw it out to be replaced or we have a value in candidate
 
-	for frame in ram:
-		if frame.ismapped and frame.lastAccessed() < candidate.lastAccessed() :
-			candidate = frame
+	for page in virtualMemory:
+		if page.ismapped and page.lastAccessed() < candidate.lastAccessed() :
+			candidate = page
 		else:
-			return frame
+			return page
 
 	return candidate
 			
 def first_in_first_out():
-	global ram
+	global virtualMemory
 
 	#Put first mapped page into candidate var
 	candidate = None
-	for frame in ram:
-		if frame.ismapped:
-			candidate = frame
-		else:
-			return frame
+	for frame in virtualMemory:
+		if page.ismapped:
+			candidate = page
 
 	#By now either we did find an empty frame and threw it out to be replaced or we have a value in candidate	
 
-	for frame in ram:
-		if frame.ismapped and frame.time_fetched < candidate.time_fetched :
-			candidate = frame
+	for page in virtualMemory:
+		if page.ismapped and page.time_fetched < candidate.time_fetched :
+			candidate = page
 
 	return candidate
 
@@ -135,16 +133,8 @@ def page_fault(process,permissions,page):
 	global instruction_count
 
 	#Currently running FIFO
-	frame = first_in_first_out()
-	frame.permissions_read = True
-	if permissions:
-		frame.permissions_write = True
-	frame.ismapped = True
-	#Specified that the frame has been mapped to a page and its permissions have been mentioned.
-
-	page.frame_index = frame.index 			#Actual mapping
-	page.process = process 					#What process is running in the page
-	return frame
+	page = first_in_first_out()
+	return page
 
 
 def readFile(path):	#it takes path with file name as input
@@ -210,23 +200,31 @@ def environment():
 			if frame.__class__ != ram[0].__class__:
 				#Something went wrong. The page was mapped to a non existant frame
 				continue
-			frame.isReferenced_read(instruction_count)
+			page.isReferenced_read(instruction_count)
 			if permissions:
-				frame.isReferenced_write(instruction_count)
-			print "frame found: ", frame.printable()
+				page.isReferenced_write(instruction_count)
+			print "frame found: ", page.printable()
 
+		#HIT ENDS
 		else:
 			#Page fault just happened.
-			frame = page_fault(process,permissions,page)
-			frame.time_fetched = instruction_count
+			page = page_fault(process,permissions,page)
+			page.permissions_read = True
+			if permissions:
+				page.permissions_write = True
+			#Specified that the frame has been mapped to a page and its permissions have been mentioned.
+
+			page.frame_index = frame.index 			#Actual mapping
+			page.process = process 					#What process is running in the page
+			page.time_fetched = instruction_count
 			#This frame will be returned with its variables appropriately set. 
 			#Need to update it's time counters now.
-			frame.isReferenced_read(instruction_count)
+			page.isReferenced_read(instruction_count)
 			if permissions:
 				#i.e. if the page's permissions were write as well
-				frame.isReferenced_write(instruction_count)
+				page.isReferenced_write(instruction_count)
 
-			print "frame replaced: ", frame.printable()
+			print "frame replaced: ", page.printable()
 			
 			#now the frame has been mapped as well as its values updated. Can continue now 
 
@@ -234,20 +232,29 @@ def environment():
 		#Let us go and update the referenced 
 
 
-
-if __name__ == "__main__":
-	readFile(os.path.join(traces_dir,'example_trace.txt'))
-	_startlocation = 0
-	for index in range(number_of_pages):
-		page = Page(index, page_size, -1, -1, _startlocation)
-		virtualMemory.append(page)
-		_startlocation=_startlocation + page_size
-
+def init_ram():
 	location = 0
+	ram = []
 	for index in range(number_of_frames):
 		frame = Frame(index,frame_size,location)
 		location = location + size
 		ram.append(frame)
+	return ram
+
+def init_virtualMemory():
+	virtualMemory = []
+	for index in range(number_of_pages):
+		page = Page(index, page_size, -1, -1, _startlocation)
+		virtualMemory.append(page)
+		_startlocation=_startlocation + page_size
+	return virtualMemory
+
+if __name__ == "__main__":
+	readFile(os.path.join(traces_dir,'example_trace.txt'))
+	_startlocation = 0
+	
+
+
 
 	#The virtual memory and RAM have been setup by now
 	environment()
