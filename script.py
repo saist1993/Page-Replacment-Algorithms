@@ -11,16 +11,20 @@ second_chance_cycle_time = 10
 instruction_count = 0
 fault_count = 0
 hit_count = 0
+
 #For adaptive average algos
 adaptive_average_size = number_of_pages/50
 adaptive_average_tolerance_ratio = 3.0
 pre_emptive_adaptive_index = 0
-cpre_emptive_adaptive_size = 50
+pre_emptive_adaptive_size = 50
 
 traces_dir = os.path.join(os.path.dirname(__file__),'traces')
 
 virtualMemory = None
 ram = None
+
+is_using_ibm = True
+ibm = None
 
 input = []
 
@@ -82,17 +86,17 @@ class Ram:
 			printout += frame.printable()
 			printout += '\n'
 		return printout
-	#def replacing(self,frame_index);
-			
-	def replacing(self,frame_index):
-		if self.first_unmapped == frame_index:	#fifo returns the frame index.. thats is replace this frame
-			for frame in self.ram:
-				if frame.index > self.first_unmapped:
-					if not frame.ismapped:
-						self.first_unmapped = frame.index
-						return
-			else:
-				self.first_unmapped = -1
+	def find_next_free(self):
+		for frame in self.ram:
+			if not frame.ismapped:
+				return frame.index
+		return -1		
+	def set_next_free(self):
+		for frame in self.ram:
+			if not frame.ismapped:
+				self.first_unmapped = frame.index
+				return
+		self.first_unmapped = -1
 	def get(self,frame_index):
 		if frame_index <= len(self.ram):
 			return self.ram[frame_index]
@@ -109,6 +113,116 @@ class VirtualMemory:
 	def get(self,page_index):
 		if page_index <= len(self.virtualMemory):
 			return self.virtualMemory[page_index]
+class ibm:
+	def __init__(self):
+		self.frequency = []
+		self.recency = []
+		self.recency_ghost = []
+		self.frequency_ghost = []
+		self.recency_size = number_of_pages/2
+		self.frequency_size = number_of_pages/2
+		self.ghost_size = number_of_pages/2
+
+	def add_to_frequency(self,page):
+		if len(self.frequency) < self.frequency_size:
+			frame_index = ram.find_next_free()
+			if frame_index == -1:
+				#Something is wrong
+				print "Error, expected free frame. Not found"
+			else:
+				page.frame_index = frame_index
+				ram.get(frame_index).ismapped = True
+				ram.set_next_free()
+				self.frequency.append(page)
+		else:
+			old_page = self.frequency.pop(0)
+			frame_index = old_page.frame_index
+			if frame_index == -1:
+				print "Errror, expected the frame index to be existant. Not so"
+			old_page.frame_index = -1
+			page.frame_index = frame_index
+			self.add_to_ghost_frequency(old_page)
+			self.frequency.append(page)
+
+	def add_to_recency(self,page):
+		if len(self.recency) < self.recency_size:
+			frame_index = ram.find_next_free()
+			if frame_index == -1:
+				#Something is wrong
+				#print len(self.recency), self.recency_size
+				print "Error, expected free frame. Not found"
+			else:
+				page.frame_index = frame_index
+				ram.get(frame_index).ismapped = True
+				ram.set_next_free()
+				self.recency.append(page)
+		else:
+			old_page = self.recency.pop(0)
+			frame_index = old_page.frame_index
+			if frame_index == -1:
+				print "Errror, expected the frame index to be existant. Not so!"
+			old_page.frame_index = -1
+			page.frame_index = frame_index
+			self.add_to_ghost_recency(old_page)
+			self.recency.append(page)
+
+	def add_to_ghost_frequency(self,page):
+		if not page.frame_index == -1:
+			print "Error, Expected the page to be unmapped"
+			ram.get(page).ismapped = False
+			ram.set_next_free()
+			page.frame_index = -1
+		if len(self.frequency_ghost) <= self.ghost_size:
+			self.frequency_ghost.append(page)
+		else:
+			self.frequency_ghost.pop(0)
+			self.frequency_ghost.append(page)
+
+	def add_to_ghost_recency(self,page):
+		if not page.frame_index == -1:
+			print "Error, Expected the page to be unmapped"
+			ram.get(page.frame_index).ismapped = False
+			ram.set_next_free()
+			page.frame_index = -1
+		if len(self.recency_ghost) <= self.ghost_size:
+			self.recency_ghost.append(page)
+		else:
+			self.recency_ghost.pop(0)
+			self.recency_ghost.append(page)
+
+	def found_in_ghost_frequency(self,page):
+		if len(self.frequency) == number_of_frames:	#Might throw some issue
+			self.frequency_ghost.remove(page)
+			self.add_to_frequency(page)
+		else:
+			self.frequency_size += 1
+			if len(self.recency) < self.recency_size:
+				self.recency_size -= 1
+			else:
+				old_page = self.recency.pop(0)
+				old_page.frame_index = -1
+				ram.get(page.frame_index).ismapped = False
+				ram.set_next_free()
+				self.recency_size -= 1
+				self.add_to_ghost_frequency(old_page)
+			self.add_to_frequency(page)
+
+	def found_in_ghost_recency(self,page):
+		if len(self.recency) == number_of_frames:	#Might throw some issue
+			self.recency_ghost.remove(page)
+			self.add_to_recency(page)
+		else:
+			self.recency_size += 1
+			if len(self.frequency) < self.frequency_size:
+				self.frequency_size -= 1
+			else:
+				old_page = self.frequency.pop(0)
+				old_page.frame_index = -1
+				ram.get(page.frame_index).ismapped = False
+				ram.set_next_free
+				self.frequency_size -= 1
+				self.add_to_ghost_recency(old_page)
+			self.add_to_recency(page)
 
 def init_ram():
 	location = 0
@@ -296,6 +410,7 @@ def least_frequently_used():
 			candidate = page
 
 	return candidate.frame_index
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
 #HIT COUNTERS~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 def hit_least_frequently_used(page):
@@ -306,7 +421,7 @@ def page_fault():
 	global instruction_count,ram
 	#Currently running FIFO
 	frame_index = average_adaptive_least_recently_used()
-	ram.replacing(frame_index)
+	ram.set_next_free(frame_index)
 	return frame_index
 def environment():
 	global virtualMemory, ram, instruction_count, input, fault_count
@@ -341,15 +456,71 @@ def environment():
 		#print "page referenced: ", page.printable()
 		#Good to go with the three variables.
 		#Let's see if the page is mapped or not
+
 		page.isOccured()
-		if page.isMapped() and page.process == process:
+		instruction_count += 1
+		#print instruction_count
+		if page.isMapped(): #and page.process == process:
 			#Cool. Better go and just update the time
+			
+			if is_using_ibm:
+				print "HIT"
+				found = False
+				for _page in ibm.frequency:
+					if _page.index == page.index:
+						ibm.frequency.remove(_page)
+						ibm.frequency.append(_page)
+						found = True
+						break
+				if not found:
+					for _page in ibm.recency:
+						if _page.index == page.index:
+							ibm.recency.remove(_page)
+							frame_index = _page.frame_index
+							_page.frame_index = -1
+							ram.get(frame_index).ismapped = False
+							ram.set_next_free()
+							ibm.add_to_frequency(_page)
+							found = True
+							break
+				if not found:
+					#Something fishy
+					print "Error, was supposed to find a match in either frequency or recency. Not so"
+				continue
+
 			page.isReferenced_read(instruction_count)
 			if permissions:
 				page.isReferenced_write(instruction_count)
 
 		#HIT ENDS
 		else:
+			'''ram_index = ram.find_next_free()
+												if not ram_index == -1:
+													ram.get(ram_index).ismapped = True
+													page.frame_index = ram_index
+													ram.set_next_free()'''
+
+					
+			fault_count += 1
+			if is_using_ibm:
+				found = False
+				for _page in ibm.frequency_ghost:
+					if _page.index == page.index:
+						ibm.found_in_ghost_frequency(page)
+						found = True
+						break
+				if not found:
+					for _page in ibm.recency_ghost:
+						if _page.index == page.index:
+							ibm.found_in_ghost_recency(page)
+							found = True
+							break
+				if not found:
+					print instruction_count, ram.find_next_free(), len(ibm.frequency)
+					ibm.add_to_recency(page)
+				continue
+
+
 			#Page fault just happened.
 			frame_index = page_fault()
 			#print "D`EBUG", frame_index
@@ -368,6 +539,7 @@ def environment():
 			ram.get(frame_index).page_index = page.index
 			page.process = process 					#What process is running in the page
 			ram.get(frame_index).ismapped = True
+			ram.set_next_free()
 			#print "DEBUG!!!!!!!!"
 			page.time_fetched = instruction_count
 
@@ -377,15 +549,15 @@ def environment():
 			if permissions:
 				#i.e. if the page's permissions were write as well
 				page.isReferenced_write(instruction_count)
-			fault_count += 1
+
 			#print "frame replaced: ", page.printable()
 		#print "\n"
-		instruction_count += 1
 
 if __name__ == "__main__":
 	readFile(os.path.join(traces_dir,'vm_trace_fragment_two.txt'))
 	ram = Ram(init_ram(),frame_size)
 	virtualMemory = VirtualMemory(init_virtualMemory())
+	ibm = ibm()
 	environment()
 	print "faults: ", fault_count
 	print "instructions: ", instruction_count
