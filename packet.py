@@ -1,4 +1,5 @@
 import statistics
+from collections import Counter
 input1 = [1,2,3,4,5,1,2,3,4,5,1,2,3,4,5]
 def unique(i,input, unique_array):
 	if input[i] in unique_array:
@@ -20,15 +21,18 @@ def main1(input,virtualMemory,count,mode):
 					counter = 0
 				counter +=1	
 			#print "the mode is " + str(statistics.mode(array))
-			mode.append(statistics.mode(array))	
+			data = Counter(array)
+			#print data.most_common(1)[0][1]
+			mode.append(data.most_common(1)[0][1])	
 			count[input[i]]=array
 
 def prediction(input,virtualMemory):
 	count = {}
 	mode = []
 	main1(input,virtualMemory,count,mode)
-	
-	k= statistics.mode(mode)
+	data = Counter(mode)
+	k=data.most_common(1)[0][1]
+	#k= statistics.mode(mode)
 	factor=int(virtualMemory)*.1
 	if k>virtualMemory:
 		print "yo"
@@ -36,11 +40,11 @@ def prediction(input,virtualMemory):
 
 	elif mode < factor:
 		print "ho" 
-		return 'first_in_first_out'
+		return 'first_in_first_out',0
 
 	else:
 		print "bo"
-		return 'ibm'
+		return 'ibm',0
 
 
 #predection(input1,4)

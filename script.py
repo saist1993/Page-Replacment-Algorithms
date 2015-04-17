@@ -155,7 +155,7 @@ class IBM:
 			if frame_index == -1:
 				#Something is wrong
 				#print len(self.recency), self.recency_size
-				print "Error, expected free frame. Not found"
+				print "Error, expected free frame. Not found!"
 			else:
 				page.frame_index = frame_index
 				ram.get(frame_index).ismapped = True
@@ -388,6 +388,9 @@ def preemptive_adaptive_least_recently_used():
 				#Overflow could have or must have happened
 				pre_emptive_adaptive_index = 0
 	#now candidate surely is not none
+	if candidate == None:
+		print "WHATTTTTTTTTTTTTTTT"
+
 	for i in range(pre_emptive_adaptive_index,min(pre_emptive_adaptive_index+pre_emptive_adaptive_size,virtualMemory.size)):
 		page = virtualMemory.get(i)
 		if page.isMapped() and page.last_referred <= candidate.last_referred:
@@ -415,7 +418,7 @@ def average_adaptive_least_recently_used():
 					return page.frame_index
 
 	#If the control comes here, then we did not find any suitable thing.
-	candidate = virtualMemory.get(random.randint(pre_emptive_adaptive_index,virtualMemory.size))
+	candidate = virtualMemory.get(random.randint(pre_emptive_adaptive_index,virtualMemory.size-1))
 	pre_emptive_adaptive_index = 0
 	return candidate.frame_index
 def least_frequently_used():
@@ -454,11 +457,11 @@ def page_fault(choice = 'ibm',var = 2):
 	if choice == 'least_recently_used':
 		frame_index = least_frequently_used()
 	if choice == 'least_recently_used_minus_k':
-		frame_index = least_recently_used_minus_k(k)
+		frame_index = least_recently_used_minus_k(var)
 	if choice == 'preemptive_adaptive_least_recently_used':
-		frame_index = preemptive_adaptive_least_recently_used
+		frame_index = preemptive_adaptive_least_recently_used()
 	if choice == 'average_adaptive_least_recently_used':
-		frame_index = average_adaptive_least_recently_used
+		frame_index = average_adaptive_least_recently_used()
 	if choice == 'least_frequently_used':
 		frame_index = least_frequently_used()
 
@@ -493,6 +496,8 @@ def environment(choice,var):
 		#Let's see if the page is mapped or not
 
 		page.isOccured()
+		if is_using_ibm:
+			instruction_count += 1
 		#print instruction_count
 		if page.isMapped():
 			#Cool. Better go and just update the time
@@ -521,7 +526,7 @@ def environment(choice,var):
 					#Something fishy
 					print "Error, was supposed to find a match in either frequency or recency. Not so"
 				continue
-
+			#print "HERE"
 			page.isReferenced_read(instruction_count)
 			if permissions:
 				page.isReferenced_write(instruction_count)
@@ -543,14 +548,15 @@ def environment(choice,var):
 							found = True
 							break
 				if not found:
-					print instruction_count, ram.find_next_free(), len(ibm.frequency)
+					print instruction_count, ram.find_next_free(), len(ibm.frequency), len(ibm.recency)
 					ibm.add_to_recency(page)
 				continue
 
+			#print "HERE"
 
 			#Page fault just happened.
 			frame_index = page_fault(choice,var)
-			#print "D`EBUG", frame_index
+
 			page.permissions_read = True
 			page.last_referred = -1
 			page.last_wrote = -1
@@ -578,53 +584,79 @@ def environment(choice,var):
 
 			#print "frame replaced: ", page.printable()
 		#print "\n"
-		instruction_count += 1
+		if not is_using_ibm:
+			instruction_count += 1
 
 	return instruction_count,fault_count
 
-def analyze_input():
-	global input, number_of_pages
-	if ram.find_next_free() == -1:
-		#RAM is cold. Simply run a default algorithm
-		return 'least_recently_used',0
 
-	#input_array = []
-	#for index in input:
-	#	page = (findPage(int(str(index[2]),16)))
-	#	if page:
-	#		input_array.append(page.index)
-		#print input_array[-1]
-
-	#choice,var = packet.prediction(input_array,number_of_pages)
-
-	return 'least_recently_used',0
-
-output_fault_ratios = []
 output_pages = []
-for num in range(500,20000,500):
-	instruction_count = 0
-	fault_count = 0
-	number_of_frames = num/2
-	number_of_pages = num
-	ram = Ram(init_ram(),frame_size)
-	virtualMemory = VirtualMemory(init_virtualMemory())
-	ibm = IBM()
-	input = []
-	readFile(os.path.join(traces_dir,'vm_trace_fragment_two.txt'))
-	choice,var = analyze_input()
+first_in_first_out_output_fault_ratios = []
+least_recently_used_output_fault_ratios = []
+second_chance_first_in_first_out_output_fault_ratios = []
+least_recently_used_minus_k_output_fault_ratios = []
+preemptive_adaptive_least_recently_used_output_fault_ratios = []
+average_adaptive_least_recently_used_output_fault_ratios = []
+least_frequently_used_output_fault_ratios = []
+ibm_output_fault_ratios = []
 
-	instructions,faults = environment(choice,var)
+def output_fault_ratios(ratio,type):
+	if type == 'first_in_first_out':
+		first_in_first_out_output_fault_ratios.append(ratio)
+	if type == 'least_recently_used':
+		least_recently_used_output_fault_ratios.append(ratio)
+	if type == 'second_chance_first_in_first_out':
+		second_chance_first_in_first_out_output_fault_ratios.append(ratio)
+	if type == 'least_recently_used_minus_k':
+		least_recently_used_minus_k_output_fault_ratios.append(ratio)
+	if type == 'preemptive_adaptive_least_recently_used':
+		preemptive_adaptive_least_recently_used_output_fault_ratios.append(ratio)
+	if type == 'average_adaptive_least_recently_used':
+		average_adaptive_least_recently_used_output_fault_ratios.append(ratio)
+	if type == 'least_frequently_used':
+		least_frequently_used_output_fault_ratios.append(ratio)
+	if type == 'ibm':
+		ibm_output_fault_ratios.append(ratio)
 
-	output_fault_ratios.append(float(fault_count)/float(instruction_count))
+for type in ['first_in_first_out','second_chance_first_in_first_out','least_recently_used','least_recently_used_minus_k','preemptive_adaptive_least_recently_used','average_adaptive_least_recently_used','least_frequently_used','ibm']:
+	print type
+	for num in range(500,10000,500):
+		instruction_count = 0
+		fault_count = 0
+		number_of_frames = num/2
+		number_of_pages = num
+		ram = Ram(init_ram(),frame_size)
+		virtualMemory = VirtualMemory(init_virtualMemory())
+		ibm = IBM()
+		input = []
+		readFile(os.path.join(traces_dir,'vm_trace_fragment_two.txt'))
+		choice,var = type,2
+		if choice == 'ibm':
+			is_using_ibm = True
+
+		instructions,faults = environment(choice,var)
+
+		output_fault_ratios(float(fault_count)/float(instruction_count),type)
+		#print "number of pages: ", num
+		#print "faults: ", faults
+		#print "instructions: ", instructions
+		#print "length of ram", ram.length
+		#print "length of vm", virtualMemory.size
+		#print "RATIO: ", float(fault_count)/float(instruction_count)
+		#print "\n"
+
+for num in range(500,10000,500):
 	output_pages.append(num)
-	print "number of pages: ", num
-	print "faults: ", faults
-	print "instructions: ", instructions
-	print "length of ram", ram.length
-	print "length of vm", virtualMemory.size
-	print "RATIO: ", float(fault_count)/float(instruction_count)
-	print "\n"
-
 #Plotting
-plt.plot(output_pages,output_fault_ratios)
+print len(output_pages)
+print len(first_in_first_out_output_fault_ratios)
+plt.plot(output_pages,first_in_first_out_output_fault_ratios,label="First In First Out")
+plt.plot(output_pages,least_recently_used_output_fault_ratios,label="Least Recently Used")
+plt.plot(output_pages,second_chance_first_in_first_out_output_fault_ratios,label="Second Chance First In First Out")
+plt.plot(output_pages,least_recently_used_minus_k_output_fault_ratios,label="Least Recently Used Minus K")
+plt.plot(output_pages,preemptive_adaptive_least_recently_used_output_fault_ratios,label="Pre-emptive Adaptive Least Recently Used")
+plt.plot(output_pages,average_adaptive_least_recently_used_output_fault_ratios,label="Average Adaptive Least Recently Used")
+plt.plot(output_pages,least_frequently_used_output_fault_ratios,label="Least Frequently Used")
+plt.plot(output_pages,ibm_output_fault_ratios,label="Adaptive Replacement Cache")
+plt.legend()
 plt.show()
