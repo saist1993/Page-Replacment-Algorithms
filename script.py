@@ -1,9 +1,13 @@
 import os
 import random
+import packet
+import matplotlib.pyplot as plt
+plt.ylabel('Page Fault Ratio')
+plt.xlabel('Number of Pages')
 
 #Variables that might affect the simulation		
-page_size = 128
-frame_size = 128
+page_size = 256
+frame_size = 256
 number_of_pages = 500	#Size of virtual memory
 number_of_frames = 250	#Size of main memory
 second_chance_cycle_time = 10
@@ -23,10 +27,11 @@ traces_dir = os.path.join(os.path.dirname(__file__),'traces')
 virtualMemory = None
 ram = None
 
-is_using_ibm = True
+is_using_ibm = False
 ibm = None
 
 input = []
+
 
 class Page:
 	def __init__(self, index, size, frame_index,process, startLocation):
@@ -113,7 +118,7 @@ class VirtualMemory:
 	def get(self,page_index):
 		if page_index <= len(self.virtualMemory):
 			return self.virtualMemory[page_index]
-class ibm:
+class IBM:
 	def __init__(self):
 		self.frequency = []
 		self.recency = []
@@ -271,6 +276,7 @@ def readFile(path):	#it takes path with file name as input
 				input.append(_list)
 	else:
 		print "path does not exists"	
+	fo.close()
 
 #ALGOS~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 def first_in_first_out():
@@ -312,7 +318,7 @@ def second_chance_first_in_first_out():
 				candidate = page
 
 		if not candidate.lastAccessed() - candidate.time_fetched >= 1:
-			print "SAVED"
+			#print "SAVED"
 			return candidate.frame_index
 		else:
 			candidate.time_fetched = instruction_count
@@ -334,6 +340,28 @@ def least_recently_used():
 		page = virtualMemory.get(j)
 		if page.isMapped() and page.last_referred <= candidate.last_referred:
 			candidate = page
+
+	return candidate.frame_index
+def least_recently_used_minus_k(k = 2):
+	global virtualMemory,ram,instruction_count
+	if ram.first_unmapped >= 0:
+		return ram.first_unmapped
+
+	tries = 0
+	while tries <= k:
+		candidate = None
+		for i in range(virtualMemory.size):
+			page = virtualMemory.get(i)
+			if page.isMapped():
+				candidate = page
+				break
+
+		for j in range(i,virtualMemory.size):
+			page = virtualMemory.get(j)
+			if page.isMapped() and page.last_referred <= candidate.last_referred:
+				candidate = page
+		candidate.last_referred = instruction_count
+		tries += 1
 
 	return candidate.frame_index
 def preemptive_adaptive_least_recently_used():
@@ -410,20 +438,33 @@ def least_frequently_used():
 			candidate = page
 
 	return candidate.frame_index
-
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
 #HIT COUNTERS~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 def hit_least_frequently_used(page):
 	page.isOccured()
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def page_fault():
+def page_fault(choice = 'ibm',var = 2):
 	global instruction_count,ram
 	#Currently running FIFO
-	frame_index = average_adaptive_least_recently_used()
-	ram.set_next_free(frame_index)
+	if choice == 'first_in_first_out':
+		frame_index = first_in_first_out()
+	if choice == 'second_chance_first_in_first_out':
+		frame_index = second_chance_first_in_first_out()
+	if choice == 'least_recently_used':
+		frame_index = least_frequently_used()
+	if choice == 'least_recently_used_minus_k':
+		frame_index = least_recently_used_minus_k(k)
+	if choice == 'preemptive_adaptive_least_recently_used':
+		frame_index = preemptive_adaptive_least_recently_used
+	if choice == 'average_adaptive_least_recently_used':
+		frame_index = average_adaptive_least_recently_used
+	if choice == 'least_frequently_used':
+		frame_index = least_frequently_used()
+
+	ram.set_next_free()
 	return frame_index
-def environment():
+def environment(choice,var):
 	global virtualMemory, ram, instruction_count, input, fault_count
 
 	for line in input:	
@@ -445,12 +486,6 @@ def environment():
 			#Huh! This should not have happened. Let us ignore?
 			#print line, "Memory Location Out of Bounds"
 			continue
-		try:
-			process = int(line[0].strip())
-		except:
-			#print line, "Process ID is not an ID :/"
-			continue	
-
 
 		#print line
 		#print "page referenced: ", page.printable()
@@ -458,13 +493,12 @@ def environment():
 		#Let's see if the page is mapped or not
 
 		page.isOccured()
-		instruction_count += 1
 		#print instruction_count
-		if page.isMapped(): #and page.process == process:
+		if page.isMapped():
 			#Cool. Better go and just update the time
 			
 			if is_using_ibm:
-				print "HIT"
+				#print "HIT"
 				found = False
 				for _page in ibm.frequency:
 					if _page.index == page.index:
@@ -493,14 +527,7 @@ def environment():
 				page.isReferenced_write(instruction_count)
 
 		#HIT ENDS
-		else:
-			'''ram_index = ram.find_next_free()
-												if not ram_index == -1:
-													ram.get(ram_index).ismapped = True
-													page.frame_index = ram_index
-													ram.set_next_free()'''
-
-					
+		else:		
 			fault_count += 1
 			if is_using_ibm:
 				found = False
@@ -522,7 +549,7 @@ def environment():
 
 
 			#Page fault just happened.
-			frame_index = page_fault()
+			frame_index = page_fault(choice,var)
 			#print "D`EBUG", frame_index
 			page.permissions_read = True
 			page.last_referred = -1
@@ -537,7 +564,6 @@ def environment():
 			old_page.frame_index = -1
 
 			ram.get(frame_index).page_index = page.index
-			page.process = process 					#What process is running in the page
 			ram.get(frame_index).ismapped = True
 			ram.set_next_free()
 			#print "DEBUG!!!!!!!!"
@@ -552,14 +578,53 @@ def environment():
 
 			#print "frame replaced: ", page.printable()
 		#print "\n"
+		instruction_count += 1
 
-if __name__ == "__main__":
-	readFile(os.path.join(traces_dir,'vm_trace_fragment_two.txt'))
+	return instruction_count,fault_count
+
+def analyze_input():
+	global input, number_of_pages
+	if ram.find_next_free() == -1:
+		#RAM is cold. Simply run a default algorithm
+		return 'least_recently_used',0
+
+	#input_array = []
+	#for index in input:
+	#	page = (findPage(int(str(index[2]),16)))
+	#	if page:
+	#		input_array.append(page.index)
+		#print input_array[-1]
+
+	#choice,var = packet.prediction(input_array,number_of_pages)
+
+	return 'least_recently_used',0
+
+output_fault_ratios = []
+output_pages = []
+for num in range(500,20000,500):
+	instruction_count = 0
+	fault_count = 0
+	number_of_frames = num/2
+	number_of_pages = num
 	ram = Ram(init_ram(),frame_size)
 	virtualMemory = VirtualMemory(init_virtualMemory())
-	ibm = ibm()
-	environment()
-	print "faults: ", fault_count
-	print "instructions: ", instruction_count
-	'''for page in virtualMemory.virtualMemory:
-					print page.index, page.occurance'''
+	ibm = IBM()
+	input = []
+	readFile(os.path.join(traces_dir,'vm_trace_fragment_two.txt'))
+	choice,var = analyze_input()
+
+	instructions,faults = environment(choice,var)
+
+	output_fault_ratios.append(float(fault_count)/float(instruction_count))
+	output_pages.append(num)
+	print "number of pages: ", num
+	print "faults: ", faults
+	print "instructions: ", instructions
+	print "length of ram", ram.length
+	print "length of vm", virtualMemory.size
+	print "RATIO: ", float(fault_count)/float(instruction_count)
+	print "\n"
+
+#Plotting
+plt.plot(output_pages,output_fault_ratios)
+plt.show()
